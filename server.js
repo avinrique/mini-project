@@ -5,14 +5,14 @@ import bodyParser from 'body-parser';
 import axios from 'axios';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
-
+import path from 'path';
 const app = express();
 const port = 3001;
 
 // Set EJS as templating engine
 app.set('view engine', 'ejs');+
 app.set('views', join(__dirname, 'views'));
-
+app.use('/reports', express.static(path.join(__dirname, 'reports')));
 // Middleware
 app.use(express.static('public'));
 app.use(bodyParser.json());
@@ -99,32 +99,35 @@ app.post('/checklint', async (req, res) => {
   }
 });
 
-app.post('/crerep', async (req, res) => {
-  const { code, language } = req.body;
+app.post('/generate-report', async (req, res) => {
+    const { code } = req.body;
 
-  try {
-    // Send the code to Flask server for linting
-    const flaskResponse = await axios.post('http://localhost:5000/analyze', {
-      code: code,
-      language : language
-    });
+    try {
+        // Step 1: Analyze code
+        const analyzeResponse = await axios.post('http://localhost:5000/analyze', { code });
+        const lintingComments = analyzeResponse.data.analysis_result || "No issues found";
 
-    // Assuming Flask returns linting comments
-    const lintingComments = flaskResponse.data.analysis_result || [];
-    console.log(lintingComments)
+        // Step 2: Request Report PDF Generation
+        const reportResponse = await axios.post('http://localhost:5000/report', { code, code_sum: lintingComments });
+        const lss = `http://localhost:3001/${reportResponse.data.report_location}`
+        const pathss = lss.replace(/\\/g, '/');
 
-    const reportResponse = await axios.post('http://localhost:5000/report', {
-      code: code,
-      code_sum: lintingComments
-    });
-    // res.json({ output: reportResponse.data.report });
-    res.json({output : reportResponse.data.report})
-  
-  } catch (error) {
-    console.error('Error checking code linting:', error);
-    res.status(500).json({ comments: [], error: 'Failed to check code on Flask server' });
-  }
+        console.log( pathss );
+        if (reportResponse.data.report_location) {
+            res.json({ 
+                message: "Report generated", 
+                download_url: pathss
+            });
+        } else {
+            res.status(500).json({ error: "Failed to generate report" });
+        }
+        
+    } catch (error) {
+        console.error('Error generating report:', error);
+        res.status(500).json({ error: 'Error generating report' });
+    }
 });
+
 app.listen(port, () => {
   console.log(`Server running at http://localhost:${port}`);
 });

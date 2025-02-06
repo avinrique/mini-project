@@ -4,7 +4,13 @@ from flask import request, jsonify
 import google.generativeai as genai
 import asyncio
 import concurrent.futures
-
+from reportlab.pdfgen import canvas
+import os
+from datetime import datetime
+from fpdf import FPDF
+import markdown2
+import pdfkit
+config = pdfkit.configuration(wkhtmltopdf=r"C:\Program Files\wkhtmltopdf\bin\wkhtmltopdf.exe")
 # Configure the Gemini API
 genai.configure(api_key="AIzaSyD02mt7Sejc3Ky6G7te8adqlk5BQr1ekj8")
 
@@ -60,7 +66,8 @@ file.read()
 with open("data.txt", "r") as file:
     file.read()
 """
-
+REPORTS_DIR = "reports"
+os.makedirs(REPORTS_DIR, exist_ok=True)
 # Create a Flask application
 app = flask.Flask(__name__)
 
@@ -75,7 +82,7 @@ def analyze_code_vulnerabilities(code):
             f"Here are some examples for reference:\n{vulnerability_examples}\n\n"
             f"Code to analyze:\n{code}"
         )
-        print(prompt)
+        
         response = model_vulnerability_checker.generate_content(prompt, safety_settings={
         'HARASSMENT': 'block_none',
         'HATE_SPEECH': 'block_none',
@@ -89,8 +96,17 @@ def analyze_code_vulnerabilities(code):
     except Exception as e:
         return f"Error during vulnerability analysis: {e}"
 @app.route("/report", methods=["POST"])
+
+# Path to wkhtmltopdf (you may need to install it first)
+
+
+# Configure pdfkit to use the correct path
+
+
+
+
 def generate_report():
-    """Generate a detailed report for the organization based on the code and its vulnerability analysis."""
+    """Generate a detailed security report for the organization based on the code and its vulnerability analysis."""
     user_code = request.json.get("code")
     linting_comments = request.json.get("code_sum")
 
@@ -108,8 +124,9 @@ def generate_report():
             "2. Detailed vulnerability findings with line numbers.\n"
             "3. Suggested improvements and secure code examples.\n"
             "4. General security best practices.\n"
+            "The report should be in a professional tone and easy to read."
         )
-        
+
         # Call Gemini to generate the report
         response = model_vulnerability_checker.generate_content(prompt, safety_settings={
             'HARASSMENT': 'block_none',
@@ -119,13 +136,58 @@ def generate_report():
             'HARM_CATEGORY_SEXUALLY_EXPLICIT': 'block_none',
             'HARM_CATEGORY_DANGEROUS_CONTENT': 'block_none',
         })
-        
-        # Return the generated report
-        return jsonify({"report": response.text})
-    
+
+        # Generate file names
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        md_filename = f"security_report_{timestamp}.md"
+        html_filename = f"security_report_{timestamp}.html"
+        pdf_filename = f"security_report_{timestamp}.pdf"
+        reports_dir = 'reports'
+
+        # Ensure reports directory exists
+        os.makedirs(reports_dir, exist_ok=True)
+
+        # Save report as Markdown file
+        md_filepath = os.path.join(reports_dir, md_filename)
+        with open(md_filepath, 'w', encoding='utf-8') as md_file:
+            md_file.write(response.text)
+
+        # Convert Markdown to HTML
+        html_content = markdown2.markdown(response.text)
+
+        # Add some basic styling
+        styled_html = f"""
+        <html>
+        <head>
+            <style>
+                body {{ font-family: Arial, sans-serif; margin: 20px; }}
+                h1, h2, h3 {{ color: #333; }}
+                pre {{ background: #f4f4f4; padding: 10px; border-radius: 5px; overflow-x: auto; }}
+                code {{ font-family: monospace; font-size: 14px; }}
+            </style>
+        </head>
+        <body>
+            <h1>Security Report</h1>
+            <p>Generated on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</p>
+            {html_content}
+        </body>
+        </html>
+        """
+
+        # Save HTML file
+        html_filepath = os.path.join(reports_dir, html_filename)
+        with open(html_filepath, 'w', encoding='utf-8') as html_file:
+            html_file.write(styled_html)
+
+        # Convert HTML to PDF
+        pdf_filepath = os.path.join(reports_dir, pdf_filename)
+        pdfkit.from_file(html_filepath, pdf_filepath, configuration=config)
+
+        # Return the path to the generated PDF file
+        return jsonify({"report_location": pdf_filepath})
+
     except Exception as e:
         return jsonify({"error": f"Error generating report: {e}"}), 500
-
 @app.route("/analyze", methods=["POST"])
 def analyze():
     """API endpoint to analyze posted code."""

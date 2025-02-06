@@ -1,5 +1,4 @@
-
- <!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -25,7 +24,7 @@
         </select>
         <button id="run-button">Run Code</button>
         <button id="lint-button">Check Code</button>
-        <button id="cre-rep">Create Report</button>
+        <button id="cre-rep">Create and Download Report</button>
     </div>
     <textarea id="editor"></textarea>
     <div id="output"></div>
@@ -37,8 +36,6 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/6.65.7/addon/hint/show-hint.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/6.65.7/addon/hint/javascript-hint.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/6.65.7/addon/hint/show-hint.min.css">
-   
-
 
     <script type="module">
         import { marked } from "https://cdn.jsdelivr.net/npm/marked/lib/marked.esm.js"; // Import marked.js as a module
@@ -111,35 +108,23 @@
                 output.innerHTML = `<div class="error">Error: ${error.message}</div>`;
             }
         });
+
+        // Create and download report handler
         document.getElementById('cre-rep').addEventListener('click', async () => {
-            try {
-                const result = await sendCodeToServer('/crerep');
-                output.innerHTML = `<pre>${result.output}</pre>`;
-                const { jsPDF } = window.jspdf;
+    try {
+        const result = await sendCodeToServer('/generate-report');
+        output.innerHTML = `<pre>${result.download_url}</pre>`;  // Optionally show the URL for debugging
 
-                const doc = new jsPDF();
+        // Trigger download of the report
+        const link = document.createElement('a');
+        link.href = result.download_url;  // Use 'download_url' from the response, not 'report_location'
+        link.download = 'generated_report.pdf';  // Name of the downloaded file
+        link.click();  // Initiate the download
+    } catch (error) {
+        output.innerHTML = `<div class="error">Error: ${error.message}</div>`;
+    }
+});
 
-                const test = marked.parse(result.output)
-                const content = test;
-
-                // Function to trigger PDF download
-                
-                    const options = {
-                        filename: 'generateds-pdf.pdf',  // PDF filename
-                        image: { type: 'jpeg', quality: 0.98 },  // Image quality in case of images in HTML
-                        html2canvas: { dpi: 192, letterRendering: true },  // Increase DPI for better quality
-                        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },  // PDF format and orientation
-                    };
-
-                    html2pdf().from(content).set(options).save();
-
-                // // Add text to PDF
-              
-                
-            } catch (error) {
-                output.innerHTML = `<div class="error">Error: ${error.message}</div>`;
-            }
-        });
 
         // Lint code button handler
         document.getElementById('lint-button').addEventListener('click', async () => {
@@ -161,16 +146,3 @@
     </script>
 </body>
 </html>
-
-
-
-
-
-
-
-
-
-
-
-
-
