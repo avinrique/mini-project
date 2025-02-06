@@ -1,0 +1,176 @@
+
+ <!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Online Code Editor</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/6.65.7/codemirror.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/6.65.7/theme/dracula.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.9.2/html2pdf.bundle.js"></script>
+<link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+    <h1>Mini Project</h1>
+ 
+    <div class="controls">
+        <select id="language-selector">
+            <option value="javascript">JavaScript</option>
+            <option value="python">Python</option>
+            <option value="java">Java</option>
+            <option value="cpp">C++</option>
+            <option value="c">C</option>
+        </select>
+        <button id="run-button">Run Code</button>
+        <button id="lint-button">Check Code</button>
+        <button id="cre-rep">Create Report</button>
+    </div>
+    <textarea id="editor"></textarea>
+    <div id="output"></div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/6.65.7/codemirror.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/6.65.7/mode/javascript/javascript.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/6.65.7/mode/python/python.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/6.65.7/mode/clike/clike.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/6.65.7/addon/hint/show-hint.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/6.65.7/addon/hint/javascript-hint.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/6.65.7/addon/hint/show-hint.min.css">
+   
+
+
+    <script type="module">
+        import { marked } from "https://cdn.jsdelivr.net/npm/marked/lib/marked.esm.js"; // Import marked.js as a module
+
+        // Initialize CodeMirror editor
+        const editor = CodeMirror.fromTextArea(document.getElementById('editor'), {
+            mode: 'javascript',
+            lineNumbers: true,
+            theme: 'dracula',
+            extraKeys: { "Ctrl-Space": "autocomplete" }
+        });
+
+        // Output container
+        const output = document.getElementById('output');
+
+        // Language modes mapping
+        const languageModes = {
+            javascript: 'javascript',
+            python: 'python',
+            java: 'text/x-java',
+            cpp: 'text/x-c++src',
+            c: 'text/x-csrc'
+        };
+
+        // Change editor mode based on language selection
+        document.getElementById('language-selector').addEventListener('change', (event) => {
+            const selectedLanguage = event.target.value;
+            editor.setOption('mode', languageModes[selectedLanguage]);
+        });
+
+        // Enable autocomplete on keypress
+        editor.on('keypress', (cm, event) => {
+            if (!cm.state.completionActive && event.key.length === 1) {
+                CodeMirror.commands.autocomplete(cm, null, { completeSingle: false });
+            }
+        });
+
+        // Function to send code to server
+        async function sendCodeToServer(endpoint) {
+            const code = editor.getValue();
+            const language = document.getElementById('language-selector').value;
+
+            output.innerHTML = '<div class="loading">Processing code...</div>';
+
+            try {
+                const response = await fetch(endpoint, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ code, language })
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
+                return await response.json();
+            } catch (error) {
+                throw new Error(`Failed to process code: ${error.message}`);
+            }
+        }
+
+        // Run code button handler
+        document.getElementById('run-button').addEventListener('click', async () => {
+            try {
+                const result = await sendCodeToServer('/execute');
+                output.innerHTML = `<pre>${result.output}</pre>`;
+            } catch (error) {
+                output.innerHTML = `<div class="error">Error: ${error.message}</div>`;
+            }
+        });
+        document.getElementById('cre-rep').addEventListener('click', async () => {
+            try {
+                const result = await sendCodeToServer('/crerep');
+                output.innerHTML = `<pre>${result.output}</pre>`;
+                const { jsPDF } = window.jspdf;
+
+                const doc = new jsPDF();
+
+                const test = marked.parse(result.output)
+                const content = test;
+
+                // Function to trigger PDF download
+                
+                    const options = {
+                        filename: 'generateds-pdf.pdf',  // PDF filename
+                        image: { type: 'jpeg', quality: 0.98 },  // Image quality in case of images in HTML
+                        html2canvas: { dpi: 192, letterRendering: true },  // Increase DPI for better quality
+                        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },  // PDF format and orientation
+                    };
+
+                    html2pdf().from(content).set(options).save();
+
+                // // Add text to PDF
+              
+                
+            } catch (error) {
+                output.innerHTML = `<div class="error">Error: ${error.message}</div>`;
+            }
+        });
+
+        // Lint code button handler
+        document.getElementById('lint-button').addEventListener('click', async () => {
+            try {
+            const result = await sendCodeToServer('/checklint');
+            output.innerHTML = ''; // Clear previous output
+
+            // Check if lint results have comments and render them as HTML
+            if (result.comments && result.comments.length > 0) {
+                // Assuming result.comments is a string containing Markdown content
+                output.innerHTML = marked.parse(result.comments);
+            } else {
+                output.innerHTML = '<div>No issues found!</div>';
+            }
+        }catch (error) {
+                output.innerHTML = `<div class="error">Error: ${error.message}</div>`;
+            }
+        });
+    </script>
+</body>
+</html>
+
+
+
+
+
+
+
+
+
+
+
+
+
